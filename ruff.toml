@@ -1,0 +1,120 @@
+# ────────────────────────────────────────────────────────────────────
+# Ruff configuration — SINGLE SOURCE OF TRUTH for linting & formatting
+# Do NOT add [tool.ruff] sections to pyproject.toml.
+# ────────────────────────────────────────────────────────────────────
+
+line-length = 100
+target-version = "py311"
+
+# Exclude generated & third-party artefacts
+exclude = [
+    ".git",
+    "__pycache__",
+    ".venv",
+    ".env",
+    "build",
+    "dist",
+    ".eggs",
+    "*.egg-info",
+    ".ruff_cache",
+    ".mypy_cache",
+]
+
+# ── Formatting ───────────────────────────────────────────────────────
+[format]
+quote-style      = "double"
+indent-style     = "space"
+line-ending      = "auto"
+docstring-code-format = true
+
+# ── Linting ──────────────────────────────────────────────────────────
+[lint]
+select = [
+    "F",      # Pyflakes
+    "E", "W", # pycodestyle
+    "I",      # isort
+    "N",      # pep8-naming
+    "PL",     # pylint
+    "UP",     # pyupgrade
+    "B",      # flake8-bugbear
+    "A",      # flake8-builtins
+    "C4",     # flake8-comprehensions
+    "ANN",    # flake8-annotations
+    "ASYNC",  # flake8-async
+    "S",      # flake8-bandit (security)
+    "BLE",    # flake8-blind-except
+    "D",      # pydocstyle
+    "RET",    # flake8-return
+    "TRY",    # tryceratops
+    "SIM",    # flake8-simplify
+    "TCH",    # flake8-type-checking
+    "PERF",   # perflint
+    "LOG",    # flake8-logging
+    "PIE",    # flake8-pie (misc. lints)
+    "PT",     # flake8-pytest-style
+    "RSE",    # flake8-raise
+    "RUF",    # Ruff-specific rules
+    "FBT",    # flake8-boolean-trap
+    "T20",    # flake8-print (no stray prints)
+    "ERA",    # eradicate (commented-out code)
+    "ICN",    # flake8-import-conventions
+    "PYI",    # pyi stub lints
+]
+
+ignore = [
+    # ── Style / formatter handles ──
+    "E501",     # line-too-long (formatter)
+    "E203",     # whitespace-before-colon
+    # ── Docstring nits ──
+    "D100",     # missing module docstring (package-level __init__)
+    "D104",     # missing package docstring
+    "D107",     # missing __init__ docstring
+    "D200",     # one-liner docstring
+    "D211",     # no-blank-line-before-class (conflicts with D203)
+    "D213",     # multi-line-summary-second-line (we use D212)
+    "D401",     # first line imperative
+    # ── Annotations ──
+    "ANN401",   # Any annotations (legitimate in serialisation)
+    # ── Type-checking ──
+    "TC004",    # relative imports
+    # ── Security ──
+    "S104",     # hardcoded bind-all (localhost is the default)
+    # ── Pylint ──
+    "PLR2004",  # magic-value comparisons (constants handle this now)
+    "PLR0915",  # too-many-statements (demos)
+    # ── Tryceratops ──
+    "TRY003",   # dynamic exception messages — custom errors
+    "TRY400",   # log.error before re-raise — structlog pattern
+    # ── Boolean trap ──
+    "FBT001",   # bool positional arg (common in include_x=True APIs)
+    "FBT002",   # bool default value (same)
+]
+
+[lint.per-file-ignores]
+"tests/**" = [
+    "ANN",      # annotations not required in tests
+    "S101",     # assert is fine in tests
+    "D",        # docstrings not required in tests
+    "BLE001",   # blind exceptions in test helpers
+    "TRY300",   # try/except in tests
+    "PLC0415",  # import outside top-level (test fixtures)
+    "PT",       # pytest style nits
+    "PLR2004",  # magic values in assertions
+    "T20",      # print() in test debugging
+]
+"**/demos/**" = ["ANN", "D", "T20", "E402"]
+"src/anthropological_simulation/**" = ["ALL"]   # Scratchpad — not production code
+
+[lint.isort]
+known-first-party = ["character_creator"]
+force-single-line = false
+lines-between-types = 1
+
+[lint.pylint]
+max-args = 7
+max-branches = 12
+max-locals = 15
+max-statements = 50
+
+[lint.pydocstyle]
+convention = "google"
