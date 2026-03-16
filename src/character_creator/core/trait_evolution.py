@@ -53,6 +53,12 @@ class ExperienceType(StrEnum):
     DISCOVERY = "discovery"
     LOSS = "loss"
     HUMOR = "humor"
+    HUMILIATION = "humiliation"
+    TRIUMPH = "triumph"
+    FORGIVENESS = "forgiveness"
+    LONELINESS = "loneliness"
+    INSPIRATION = "inspiration"
+    GRATITUDE = "gratitude"
     NEUTRAL = "neutral"
 
 
@@ -100,6 +106,36 @@ EXPERIENCE_INFLUENCE_VECTORS: dict[ExperienceType, dict[str, float]] = {
         "humor_inclination": 0.02,
         "warmth": 0.01,
         "formality": -0.01,
+    },
+    ExperienceType.HUMILIATION: {
+        "assertiveness": -0.02,
+        "emotional_stability": -0.02,
+        "formality": 0.01,
+    },
+    ExperienceType.TRIUMPH: {
+        "assertiveness": 0.02,
+        "emotional_stability": 0.02,
+        "extraversion": 0.01,
+    },
+    ExperienceType.FORGIVENESS: {
+        "warmth": 0.02,
+        "agreeableness": 0.02,
+        "emotional_stability": 0.01,
+    },
+    ExperienceType.LONELINESS: {
+        "extraversion": -0.02,
+        "warmth": -0.01,
+        "emotional_stability": -0.02,
+    },
+    ExperienceType.INSPIRATION: {
+        "openness": 0.02,
+        "conscientiousness": 0.01,
+        "assertiveness": 0.01,
+    },
+    ExperienceType.GRATITUDE: {
+        "warmth": 0.02,
+        "agreeableness": 0.01,
+        "emotional_stability": 0.01,
     },
     ExperienceType.NEUTRAL: {},
 }
@@ -158,6 +194,12 @@ _EXPERIENCE_KEYWORDS: dict[ExperienceType, list[str]] = {
     ExperienceType.DISCOVERY: ["discover", "learn", "realise", "realize", "understand", "insight", "eureka"],
     ExperienceType.LOSS: ["loss", "lost", "gone", "miss", "grief", "mourn", "death"],
     ExperienceType.HUMOR: ["laugh", "funny", "joke", "hilarious", "haha", "lol", "amuse"],
+    ExperienceType.HUMILIATION: ["humiliate", "embarrass", "shame", "mock", "ridicule", "degrade", "humbled"],
+    ExperienceType.TRIUMPH: ["triumph", "victory", "conquer", "overcome", "prevail", "champion", "master"],
+    ExperienceType.FORGIVENESS: ["forgive", "pardon", "reconcile", "let go", "make peace", "apologise", "apologize"],
+    ExperienceType.LONELINESS: ["lonely", "alone", "isolated", "forgotten", "abandoned", "no one", "empty"],
+    ExperienceType.INSPIRATION: ["inspire", "motivate", "enthuse", "ignite", "dream", "aspire", "possibility"],
+    ExperienceType.GRATITUDE: ["grateful", "thankful", "appreciate", "thank you", "indebted", "blessing", "fortunate"],
 }
 
 
