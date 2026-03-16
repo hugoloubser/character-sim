@@ -195,7 +195,7 @@ async def generate_response(request: DialogueRequest) -> dict[str, Any]:
     )
     try:
         system = DialogueSystem(provider)
-        dialogue_text, internal_thought = await system.generate_response(context, character)
+        pre_exchange_thought, dialogue_text, internal_thought = await system.generate_response(context, character)
         emotional_state = await system.infer_emotional_context(character, dialogue_text)
     except LLMError as exc:
         logger.exception("LLM generation failed for %s", request.character_name)
@@ -209,6 +209,7 @@ async def generate_response(request: DialogueRequest) -> dict[str, Any]:
     return {
         "character_name": request.character_name,
         "dialogue": dialogue_text,
+        "pre_exchange_thought": pre_exchange_thought,
         "internal_thought": internal_thought,
         "emotional_state": emotional_state,
     }
@@ -249,7 +250,7 @@ async def add_exchange(scene_id: str, request: DialogueRequest) -> dict[str, Any
     )
     try:
         system = DialogueSystem(provider)
-        dialogue_text, internal_thought = await system.generate_response(scene, character)
+        pre_exchange_thought, dialogue_text, internal_thought = await system.generate_response(scene, character)
         emotional_state = await system.infer_emotional_context(character, dialogue_text)
     except LLMError as exc:
         logger.exception("LLM generation failed for scene %s", scene_id)
@@ -265,6 +266,7 @@ async def add_exchange(scene_id: str, request: DialogueRequest) -> dict[str, Any
         speaker=character,
         text=dialogue_text,
         emotional_context=emotional_state,
+        pre_exchange_thought=pre_exchange_thought,
         internal_thought=internal_thought,
     )
 
@@ -275,6 +277,7 @@ async def add_exchange(scene_id: str, request: DialogueRequest) -> dict[str, Any
             speaker=character.name,
             text=dialogue_text,
             emotional_context=emotional_state,
+            pre_exchange_thought=pre_exchange_thought,
             internal_thought=internal_thought,
         )
         interaction_repository.save(record)

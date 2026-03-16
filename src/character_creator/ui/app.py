@@ -361,6 +361,7 @@ def _emotion_icon(emotion: str) -> str:
 def _render_chat_bubble(
     speaker_name: str,
     dialogue: str,
+    pre_thought: str,
     internal: str,
     emotional: str,
     color: str,
@@ -374,10 +375,12 @@ def _render_chat_bubble(
         f'<div class="chat-bubble" style="border-left:3px solid {color};">'
         f'<div class="chat-speaker" style="color:{color}">'
         f"{speaker_name}{badge}</div>"
-        f"{dialogue}"
     )
+    if pre_thought:
+        html += f'<div class="chat-thought">💭 {pre_thought}</div>'
+    html += dialogue
     if internal:
-        html += f'<div class="chat-thought">💭 {internal}</div>'
+        html += f'<div class="chat-thought">🧠 {internal}</div>'
     html += f'<div class="chat-mood">{icon} {emotional}</div></div>'
     return html
 
@@ -530,15 +533,15 @@ def _generate_exchange(
     system: DialogueSystem,
     context: DialogueContext,
     speaker: Character,
-) -> tuple[str, str, str]:
-    """Run one LLM exchange and return (dialogue, internal, emotional)."""
-    dialogue, internal = loop.run_until_complete(
+) -> tuple[str, str, str, str]:
+    """Run one LLM exchange and return (pre_thought, dialogue, internal, emotional)."""
+    pre_thought, dialogue, internal = loop.run_until_complete(
         system.generate_response(context, speaker),
     )
     emotional = loop.run_until_complete(
         system.infer_emotional_context(speaker, dialogue),
     )
-    return dialogue, internal, emotional
+    return pre_thought, dialogue, internal, emotional
 
 
 def _run_post_exchange_hooks(
@@ -581,11 +584,12 @@ def _run_post_exchange_hooks(
     )
 
 
-def _add_exchange_to_state(
+def _add_exchange_to_state(  # noqa: PLR0913
     context: DialogueContext,
     record: InteractionRecord,
     speaker: Character,
     dialogue: str,
+    pre_thought: str,
     internal: str,
     emotional: str,
     *,
@@ -596,12 +600,14 @@ def _add_exchange_to_state(
         speaker=speaker,
         text=dialogue,
         emotional_context=emotional,
+        pre_exchange_thought=pre_thought,
         internal_thought=internal,
     )
     record.add_exchange(
         speaker=speaker.name,
         text=dialogue,
         emotional_context=emotional,
+        pre_exchange_thought=pre_thought,
         internal_thought=internal,
     )
 
@@ -630,6 +636,7 @@ def _add_exchange_to_state(
     return {
         "speaker": speaker.name,
         "text": dialogue,
+        "pre_thought": pre_thought,
         "internal": internal,
         "emotional": emotional,
         "is_user": is_user,
@@ -1308,7 +1315,7 @@ def _render_scene_exchanges() -> None:
         c = _color_for(ex["speaker"])
         st.markdown(
             _render_chat_bubble(
-                ex["speaker"], ex["text"], ex["internal"],
+                ex["speaker"], ex["text"], ex.get("pre_thought", ""), ex["internal"],
                 ex["emotional"], c, is_user=ex.get("is_user", False),
             ),
             unsafe_allow_html=True,
@@ -1398,11 +1405,11 @@ def _run_one_step(speaker: Character | None = None) -> None:
 
     exchange_index = len(ctx.exchanges)
 
-    dialogue, internal, emotional = _generate_exchange(
+    pre_thought, dialogue, internal, emotional = _generate_exchange(
         loop, system, ctx, speaker,
     )
     ex = _add_exchange_to_state(
-        ctx, record, speaker, dialogue, internal, emotional,
+        ctx, record, speaker, dialogue, pre_thought, internal, emotional,
     )
     st.session_state.scene_exchanges.append(ex)
 
@@ -1418,7 +1425,7 @@ def _run_user_step(user_char: Character, user_text: str) -> None:
 
     emotional = DialogueSystem._infer_emotional_context_heuristic(user_char, user_text)
     ex = _add_exchange_to_state(
-        ctx, record, user_char, user_text, "", emotional,
+        ctx, record, user_char, user_text, "", "", emotional,
         is_user=True,
     )
     st.session_state.scene_exchanges.append(ex)
@@ -1681,7 +1688,7 @@ def _director_run_continuous() -> None:
                 unsafe_allow_html=True,
             )
             try:
-                dialogue, internal, emotional = _generate_exchange(
+                pre_thought, dialogue, internal, emotional = _generate_exchange(
                     loop, system, ctx, speaker,
                 )
             except Exception as exc:  # noqa: BLE001
@@ -1691,7 +1698,7 @@ def _director_run_continuous() -> None:
                 break
 
             ex = _add_exchange_to_state(
-                ctx, record, speaker, dialogue, internal, emotional,
+                ctx, record, speaker, dialogue, pre_thought, internal, emotional,
             )
             st.session_state.scene_exchanges.append(ex)
 
@@ -1703,7 +1710,7 @@ def _director_run_continuous() -> None:
                 c = _color_for(speaker.name)
                 st.markdown(
                     _render_chat_bubble(
-                        speaker.name, dialogue, internal, emotional, c,
+                        speaker.name, dialogue, pre_thought, internal, emotional, c,
                     ),
                     unsafe_allow_html=True,
                 )
@@ -1740,6 +1747,7 @@ def _render_recent_sessions() -> None:
                     _render_chat_bubble(
                         ex.get("speaker", "?"),
                         ex.get("text", ""),
+                        ex.get("pre_exchange_thought", ""),
                         ex.get("internal_thought", ""),
                         ex.get("emotional_context", "neutral"),
                         c,
@@ -2203,6 +2211,7 @@ def page_archive() -> None:
                     _render_chat_bubble(
                         ex.get("speaker", "?"),
                         ex.get("text", ""),
+                        ex.get("pre_exchange_thought", ""),
                         ex.get("internal_thought", ""),
                         ex.get("emotional_context", "neutral"),
                         c,

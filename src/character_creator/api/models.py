@@ -93,6 +93,7 @@ class DialogueResponse(BaseModel):
 
     character_name: str
     dialogue: str
+    pre_exchange_thought: str
     internal_thought: str
     emotional_state: str
 

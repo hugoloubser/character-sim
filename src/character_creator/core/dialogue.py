@@ -44,7 +44,8 @@ class DialogueExchange(BaseModel):
     speaker: Character
     text: str
     emotional_context: str  # How they felt saying this
-    internal_thought: str  # What they were thinking
+    pre_exchange_thought: str  # What they were thinking before speaking (prospective)
+    internal_thought: str  # What they were thinking in the immediate aftermath (retrospective)
 
 
 class DialogueContext(BaseModel):
@@ -66,6 +67,7 @@ class DialogueContext(BaseModel):
         speaker: Character,
         text: str,
         emotional_context: str = DEFAULT_EMOTIONAL_STATE,
+        pre_exchange_thought: str = "",
         internal_thought: str = "",
     ) -> None:
         """Add a dialogue exchange to the scene."""
@@ -73,6 +75,7 @@ class DialogueContext(BaseModel):
             speaker=speaker,
             text=text,
             emotional_context=emotional_context,
+            pre_exchange_thought=pre_exchange_thought,
             internal_thought=internal_thought,
         )
         self.exchanges.append(exchange)
@@ -100,6 +103,7 @@ class DialogueContext(BaseModel):
                     "speaker": e.speaker.name,
                     "text": e.text,
                     "emotional_context": e.emotional_context,
+                    "pre_exchange_thought": e.pre_exchange_thought,
                     "internal_thought": e.internal_thought,
                 }
                 for e in self.exchanges
@@ -163,13 +167,18 @@ class DialogueSystem:
             conversation_history=history_str,
         )
 
-    def generate_internal_monologue_prompt(
+    def generate_pre_exchange_monologue_prompt(
         self, context: DialogueContext, character: Character
     ) -> str:
-        """Generate a prompt for character's internal thoughts.
+        """Generate a prompt for character's prospective thoughts before speaking.
+
+        This captures the character's immediate inner reaction after hearing the
+        previous speaker and their deliberation about what to say next, accounting
+        for all contextual factors.
 
         Args:
-            context: Current dialogue context.
+            context: Current dialogue context (does not yet include this character's
+                upcoming utterance).
             character: Character whose thoughts to generate.
 
         Returns:
@@ -191,7 +200,7 @@ class DialogueSystem:
                 tensions_str = "\n".join(tension_lines)
 
         return substitute_prompt(
-            DialoguePrompts.INTERNAL_MONOLOGUE,
+            DialoguePrompts.PRE_EXCHANGE_MONOLOGUE,
             character_name=character.name,
             character_profile=character.get_character_profile(),
             mbti_type=character.personality.mbti_type.value,
@@ -201,19 +210,101 @@ class DialogueSystem:
             conversation_history=dialogue_str,
         )
 
+    def generate_post_exchange_monologue_prompt(
+        self, context: DialogueContext, character: Character, own_dialogue: str
+    ) -> str:
+        """Generate a prompt for character's retrospective thoughts after speaking.
+
+        This captures the character's immediate inner afterthought following their
+        own public exchange — replaying what they said, assessing the interaction,
+        or simply moving on, shaped by their personality.
+
+        Args:
+            context: Current dialogue context (does not yet include this character's
+                exchange, which is provided separately via ``own_dialogue``).
+            character: Character whose thoughts to generate.
+            own_dialogue: The dialogue text the character just produced.
+
+        Returns:
+            Formatted prompt for LLM.
+
+        """
+        recent_dialogue = context.get_conversation_history().split("\n")[-3:]
+        dialogue_str = "\n".join(recent_dialogue)
+
+        # Format active dissonances for internal monologue
+        tensions_str = "(none)"
+        if character.active_dissonances:
+            tension_lines = [
+                f"- I value {d.value} but I've been {d.behaviour}"
+                for d in character.active_dissonances
+                if not d.resolved
+            ]
+            if tension_lines:
+                tensions_str = "\n".join(tension_lines)
+
+        return substitute_prompt(
+            DialoguePrompts.POST_EXCHANGE_MONOLOGUE,
+            character_name=character.name,
+            character_profile=character.get_character_profile(),
+            mbti_type=character.personality.mbti_type.value,
+            mbti_archetype=character.personality.mbti_archetype,
+            communication_style=character.personality.communication_style,
+            active_tensions=tensions_str,
+            conversation_history=dialogue_str,
+            own_dialogue=own_dialogue,
+        )
+
+    def generate_internal_monologue_prompt(
+        self, context: DialogueContext, character: Character
+    ) -> str:
+        """Generate a prompt for character's internal thoughts.
+
+        .. deprecated::
+            Use :meth:`generate_post_exchange_monologue_prompt` instead,
+            which accepts ``own_dialogue`` for full retrospective context.
+            This method is kept for backward compatibility and calls
+            ``generate_post_exchange_monologue_prompt`` with an empty string.
+
+        Args:
+            context: Current dialogue context.
+            character: Character whose thoughts to generate.
+
+        Returns:
+            Formatted prompt for LLM.
+
+        """
+        return self.generate_post_exchange_monologue_prompt(context, character, own_dialogue="")
+
     async def generate_response(
         self, context: DialogueContext, character: Character
-    ) -> tuple[str, str]:
-        """Generate dialogue response and internal monologue for a character.
+    ) -> tuple[str, str, str]:
+        """Generate pre-exchange thought, dialogue response, and post-exchange thought.
+
+        The prospective inner monologue is generated first, capturing the character's
+        immediate reaction to what was last said and their deliberation about what to
+        say next.  The dialogue is then produced, followed by the retrospective inner
+        monologue — the character's private afterthought about what they just said.
 
         Args:
             context: Current dialogue context.
             character: Character who should respond.
 
         Returns:
-            Tuple of (dialogue_response, internal_monologue).
+            Tuple of (pre_exchange_thought, dialogue_response, post_exchange_thought).
 
         """
+        # Step 1: prospective inner monologue — reaction to the previous speaker
+        pre_monologue_prompt = self.generate_pre_exchange_monologue_prompt(context, character)
+        with llm_context("pre_exchange_monologue"):
+            pre_exchange_thought = await self.llm_provider.generate(
+                pre_monologue_prompt, temperature=MONOLOGUE_TEMPERATURE
+            )
+
+        # Small pause between API calls to avoid back-to-back rate-limit hits
+        await asyncio.sleep(0.5)
+
+        # Step 2: public dialogue — what the character chooses to say
         dialogue_prompt = self.generate_dialogue_prompt(context, character)
         with llm_context("dialogue"):
             dialogue_response = await self.llm_provider.generate(
@@ -223,13 +314,20 @@ class DialogueSystem:
         # Small pause between API calls to avoid back-to-back rate-limit hits
         await asyncio.sleep(0.5)
 
-        monologue_prompt = self.generate_internal_monologue_prompt(context, character)
-        with llm_context("internal_monologue"):
-            internal_monologue = await self.llm_provider.generate(
-                monologue_prompt, temperature=MONOLOGUE_TEMPERATURE
+        # Step 3: retrospective inner monologue — afterthought about what was just said
+        post_monologue_prompt = self.generate_post_exchange_monologue_prompt(
+            context, character, own_dialogue=dialogue_response.strip()
+        )
+        with llm_context("post_exchange_monologue"):
+            post_exchange_thought = await self.llm_provider.generate(
+                post_monologue_prompt, temperature=MONOLOGUE_TEMPERATURE
             )
 
-        return dialogue_response.strip(), internal_monologue.strip()
+        return (
+            pre_exchange_thought.strip(),
+            dialogue_response.strip(),
+            post_exchange_thought.strip(),
+        )
 
     def generate_next_speaker(
         self, context: DialogueContext
@@ -328,8 +426,8 @@ class DialogueSystem:
                 speaker = self.generate_next_speaker(context)
                 logger.info("Exchange %d/%d — speaker: %s", i + 1, num_exchanges, speaker.name)
 
-                # Generate dialogue and internal state
-                dialogue, internal_thought = await self.generate_response(context, speaker)
+                # Generate pre-exchange thought, dialogue, and post-exchange thought
+                pre_exchange_thought, dialogue, post_exchange_thought = await self.generate_response(context, speaker)
                 logger.debug("Dialogue: %.120s", dialogue)
 
                 # Determine emotional context via LLM
@@ -341,7 +439,8 @@ class DialogueSystem:
                     speaker=speaker,
                     text=dialogue,
                     emotional_context=emotional_context,
-                    internal_thought=internal_thought if include_internal_thoughts else "",
+                    pre_exchange_thought=pre_exchange_thought if include_internal_thoughts else "",
+                    internal_thought=post_exchange_thought if include_internal_thoughts else "",
                 )
 
                 # Trigger memory condensation for the speaker if needed

@@ -216,13 +216,14 @@ async def run_dialogue(
             speaker = dialogue_system.generate_next_speaker(context)
             print(f"\n[{i + 1}/{num_exchanges}] {speaker.name} is thinking …")
 
-            dialogue, internal = await dialogue_system.generate_response(context, speaker)
+            pre_thought, dialogue, internal = await dialogue_system.generate_response(context, speaker)
             emotional = await dialogue_system.infer_emotional_context(speaker, dialogue)
 
             context.add_exchange(
                 speaker=speaker,
                 text=dialogue,
                 emotional_context=emotional,
+                pre_exchange_thought=pre_thought,
                 internal_thought=internal,
             )
 
@@ -230,10 +231,12 @@ async def run_dialogue(
                 speaker=speaker.name,
                 text=dialogue,
                 emotional_context=emotional,
+                pre_exchange_thought=pre_thought,
                 internal_thought=internal,
             )
 
             # Pretty-print the exchange
+            print(f"  💭 ({speaker.name} thinks: {pre_thought})")
             print(f"  💬 {speaker.name}: {dialogue}")
             print(f"  🧠 ({speaker.name}'s thought: {internal})")
             print(f"  😶 Mood: {emotional}")
