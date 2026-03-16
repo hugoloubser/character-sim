@@ -49,7 +49,9 @@ class TestExperienceType:
     def test_all_enum_values(self) -> None:
         expected = {
             "conflict", "vulnerability", "success", "rejection",
-            "connection", "betrayal", "discovery", "loss", "humor", "neutral",
+            "connection", "betrayal", "discovery", "loss", "humor",
+            "humiliation", "triumph", "forgiveness", "loneliness",
+            "inspiration", "gratitude", "neutral",
         }
         assert {e.value for e in ExperienceType} == expected
 
