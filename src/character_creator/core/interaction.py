@@ -33,7 +33,7 @@ class InteractionRecord(BaseModel):
         scene_description: The scene that was set for the interaction.
         topic: The conversational topic.
         characters: Names of characters involved.
-        exchanges: List of exchange dicts (speaker, text, emotional_context, internal_thought).
+        exchanges: List of exchange dicts (speaker, text, emotional_context, pre_exchange_thought, internal_thought).
         provider: LLM provider name used (e.g. "anthropic").
         model: Model identifier (e.g. "claude-3-5-sonnet-20241022").
         max_exchanges: Configured exchange cap.
@@ -73,6 +73,7 @@ class InteractionRecord(BaseModel):
         speaker: str,
         text: str,
         emotional_context: str = "",
+        pre_exchange_thought: str = "",
         internal_thought: str = "",
     ) -> None:
         """Append an exchange to the record."""
@@ -81,6 +82,7 @@ class InteractionRecord(BaseModel):
                 "speaker": speaker,
                 "text": text,
                 "emotional_context": emotional_context,
+                "pre_exchange_thought": pre_exchange_thought,
                 "internal_thought": internal_thought,
             }
         )

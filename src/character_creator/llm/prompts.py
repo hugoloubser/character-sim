@@ -105,7 +105,33 @@ $conversation_history
 
 $character_name's response:""")
 
-    INTERNAL_MONOLOGUE = Template("""Based on $character_name's character, what would they be thinking internally?
+    PRE_EXCHANGE_MONOLOGUE = Template("""You are generating $character_name's immediate inner reaction after hearing the previous speaker, as they prepare to respond.
+
+## Character Profile
+$character_profile
+
+## MBTI Context
+Personality type: $mbti_type ($mbti_archetype).
+Inner world filter: $communication_style
+
+## Active Internal Tensions
+$active_tensions
+
+## Recent Dialogue (ending with what $character_name just heard)
+$conversation_history
+
+## Instructions
+This is the unguarded thought that surfaces the instant the previous speaker finishes — before $character_name chooses to speak.
+1. Capture their raw, instinctive reaction to what was just said.
+2. Show any gap between their private feelings and the composed face they will present publicly.
+3. Let them weigh what to say next, shaped by their MBTI type, values, and active tensions.
+4. The thought should feel live and immediate — this is the moment of deliberation before they open their mouth.
+5. Generate a brief internal thought (1-3 sentences).
+6. Respond with ONLY the internal thought text, no narration or meta-commentary.
+
+$character_name's pre-exchange thought:""")
+
+    POST_EXCHANGE_MONOLOGUE = Template("""You are generating $character_name's immediate inner afterthought in the moments after they have just spoken.
 
 ## Character Profile
 $character_profile
@@ -120,14 +146,18 @@ $active_tensions
 ## Recent Dialogue
 $conversation_history
 
-## Instructions
-1. Generate a brief internal thought (1-2 sentences) that reflects their mental state.
-2. Show their real feelings beneath any social facade.
-3. Consider their MBTI type — it shapes how they internally process events.
-4. If there are active internal tensions, the character may wrestle with them internally.
-5. Respond with ONLY the internal thought text.
+## What $character_name Just Said
+"$own_dialogue"
 
-$character_name's internal thought:""")
+## Instructions
+This is the private thought that follows the act of speaking — an unfiltered reaction to their own words.
+1. Generate a brief internal thought (1-2 sentences) that reflects their mental state in the immediate aftermath.
+2. They may replay what they said, feel relief or regret, notice something they left out, or simply let it go — whatever fits their personality.
+3. Consider their MBTI type — it shapes how they internally process their own actions.
+4. If there are active internal tensions, the character may feel them more sharply now that they have spoken.
+5. Respond with ONLY the internal thought text, no narration or meta-commentary.
+
+$character_name's post-exchange thought:""")
 
     EMOTION_INFERENCE = Template("""Given this dialogue line and the speaker's personality, identify the emotional context in ONE word.
 

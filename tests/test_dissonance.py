@@ -450,7 +450,7 @@ class TestDissonancePrompts:
         from character_creator.llm.prompts import DialoguePrompts, substitute_prompt
 
         result = substitute_prompt(
-            DialoguePrompts.INTERNAL_MONOLOGUE,
+            DialoguePrompts.POST_EXCHANGE_MONOLOGUE,
             character_name="Kira",
             character_profile="Profile",
             mbti_type="INFJ",
@@ -458,7 +458,8 @@ class TestDissonancePrompts:
             communication_style="empathetic",
             active_tensions="- I value honesty but I've been deflecting questions",
             conversation_history="Kira: Fine. Whatever.",
+            own_dialogue="Fine. Whatever.",
         )
         assert "honesty" in result
         assert "deflecting" in result
-        assert "wrestle with" in result.lower() or "tensions" in result.lower()
+        assert "tensions" in result.lower() or "spoken" in result.lower()

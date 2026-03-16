@@ -146,8 +146,29 @@ class TestPromptGeneration:
     def test_monologue_prompt_contains_character(
         self, system: DialogueSystem, scene: DialogueContext, alice: Character
     ) -> None:
-        prompt = system.generate_internal_monologue_prompt(scene, alice)
+        prompt = system.generate_post_exchange_monologue_prompt(scene, alice, own_dialogue="")
         assert "Alice" in prompt
+
+    def test_pre_exchange_monologue_prompt_contains_character(
+        self, system: DialogueSystem, scene: DialogueContext, alice: Character
+    ) -> None:
+        prompt = system.generate_pre_exchange_monologue_prompt(scene, alice)
+        assert "Alice" in prompt
+
+    def test_pre_exchange_monologue_prompt_is_prospective(
+        self, system: DialogueSystem, scene: DialogueContext, alice: Character
+    ) -> None:
+        """Pre-exchange prompt should frame the monologue as before speaking."""
+        prompt = system.generate_pre_exchange_monologue_prompt(scene, alice)
+        assert "pre-exchange" in prompt.lower() or "before" in prompt.lower() or "deliberation" in prompt.lower()
+
+    def test_post_exchange_monologue_prompt_includes_own_dialogue(
+        self, system: DialogueSystem, scene: DialogueContext, alice: Character
+    ) -> None:
+        """Post-exchange prompt should include the character's own dialogue text."""
+        own_dialogue = "I think therefore I am."
+        prompt = system.generate_post_exchange_monologue_prompt(scene, alice, own_dialogue=own_dialogue)
+        assert own_dialogue in prompt
 
 
 # ---------------------------------------------------------------------------
@@ -223,17 +244,19 @@ class TestGenerateResponse:
     """Tests for the full async generate_response pipeline."""
 
     @pytest.mark.asyncio
-    async def test_returns_dialogue_and_monologue(
+    async def test_returns_pre_thought_dialogue_and_post_thought(
         self, system: DialogueSystem, scene: DialogueContext, alice: Character, mock_provider: AsyncMock
     ) -> None:
         mock_provider.generate.side_effect = [
-            "A beautiful day for philosophy.",
-            "I really enjoy these conversations.",
+            "I wonder what they mean by that.",     # pre-exchange thought
+            "A beautiful day for philosophy.",       # dialogue
+            "I hope that landed the right way.",     # post-exchange thought
         ]
-        dialogue, monologue = await system.generate_response(scene, alice)
+        pre_thought, dialogue, post_thought = await system.generate_response(scene, alice)
+        assert pre_thought == "I wonder what they mean by that."
         assert dialogue == "A beautiful day for philosophy."
-        assert monologue == "I really enjoy these conversations."
-        assert mock_provider.generate.call_count == 2
+        assert post_thought == "I hope that landed the right way."
+        assert mock_provider.generate.call_count == 3
 
     @pytest.mark.asyncio
     async def test_sequential_dialogue(
@@ -243,3 +266,26 @@ class TestGenerateResponse:
         mock_provider.generate.return_value = "Test line."
         await system.generate_sequential_dialogue(scene, num_exchanges=2)
         assert len(scene.exchanges) == 2
+
+    @pytest.mark.asyncio
+    async def test_exchange_stores_both_thoughts(
+        self, system: DialogueSystem, scene: DialogueContext, alice: Character, mock_provider: AsyncMock
+    ) -> None:
+        """Both pre- and post-exchange thoughts are stored on the DialogueExchange."""
+        mock_provider.generate.side_effect = [
+            "pre-thought here",
+            "public dialogue here",
+            "post-thought here",
+            "neutral",  # emotion inference
+        ]
+        pre_thought, dialogue, post_thought = await system.generate_response(scene, alice)
+        emotional = await system.infer_emotional_context(alice, dialogue)
+        scene.add_exchange(
+            speaker=alice,
+            text=dialogue,
+            emotional_context=emotional,
+            pre_exchange_thought=pre_thought,
+            internal_thought=post_thought,
+        )
+        assert scene.exchanges[0].pre_exchange_thought == "pre-thought here"
+        assert scene.exchanges[0].internal_thought == "post-thought here"

@@ -231,9 +231,10 @@ class TestGenerateResponse:
 
         mock_provider = AsyncMock()
         mock_provider.generate = AsyncMock(side_effect=[
-            "A brave reply!",       # dialogue
-            "I must press on.",     # internal monologue
-            "determined",           # emotion inference
+            "I sense danger here.",  # pre-exchange thought
+            "A brave reply!",        # dialogue
+            "I must press on.",      # post-exchange thought (internal monologue)
+            "determined",            # emotion inference
         ])
         mock_provider.close = AsyncMock()
 
@@ -253,6 +254,7 @@ class TestGenerateResponse:
         assert resp.status_code == 200
         data = resp.json()
         assert data["character_name"] == "TestHero"
+        assert data["pre_exchange_thought"] == "I sense danger here."
         assert data["dialogue"] == "A brave reply!"
         assert data["internal_thought"] == "I must press on."
         assert data["emotional_state"] == "determined"
