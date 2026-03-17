@@ -11,10 +11,11 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import logging
 import math
 import time
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import streamlit as st
 
@@ -48,9 +49,14 @@ from character_creator.llm.providers import get_llm_provider  # noqa: E402
 from character_creator.ui.dashboard import page_dashboard  # noqa: E402
 from character_creator.utils.config import settings  # noqa: E402
 
+if TYPE_CHECKING:
+    from character_creator.core.trait_evolution import MilestoneReview
+
 # ---------------------------------------------------------------------------
 # Globals / singletons
 # ---------------------------------------------------------------------------
+
+logger = logging.getLogger(__name__)
 
 MAX_EXCHANGES = 30
 
@@ -239,6 +245,82 @@ _CUSTOM_CSS = """
     margin-left: 0.4rem;
     vertical-align: middle;
 }
+
+/* -- evolution panel -------------------------------------------------- */
+.evo-header {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    color: #a78bfa;
+    opacity: 0.85;
+    margin: 0.7rem 0 0.3rem 0;
+    text-transform: uppercase;
+}
+.evo-narrative {
+    font-style: italic;
+    font-size: 0.83rem;
+    opacity: 0.75;
+    line-height: 1.55;
+    margin-bottom: 0.5rem;
+    padding: 0.35rem 0.6rem;
+    background: rgba(167,139,250,0.07);
+    border-left: 2px solid rgba(167,139,250,0.45);
+    border-radius: 0 4px 4px 0;
+}
+.evo-trait-row {
+    display: flex;
+    align-items: center;
+    margin-bottom: 0.2rem;
+    font-size: 0.82rem;
+}
+.evo-trait-label {
+    width: 115px;
+    flex-shrink: 0;
+    opacity: 0.7;
+}
+.evo-bar-wrap {
+    flex: 1;
+    height: 6px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 3px;
+    position: relative;
+    overflow: hidden;
+}
+.evo-bar-old {
+    position: absolute;
+    top: 0; left: 0;
+    height: 100%;
+    border-radius: 3px;
+    background: rgba(255,255,255,0.18);
+}
+.evo-bar-new {
+    position: absolute;
+    top: 0; left: 0;
+    height: 100%;
+    border-radius: 3px;
+}
+.evo-delta {
+    width: 52px;
+    text-align: right;
+    font-size: 0.77rem;
+    font-family: monospace;
+    font-weight: 600;
+}
+.evo-delta-pos { color: #34d399; }
+.evo-delta-neg { color: #f87171; }
+.evo-justification {
+    font-size: 0.76rem;
+    opacity: 0.6;
+    font-style: italic;
+    padding: 0 0 0.35rem 0.5rem;
+    line-height: 1.4;
+}
+.evo-micro-label {
+    font-size: 0.7rem;
+    opacity: 0.5;
+    margin: 0.15rem 0 0.1rem 0;
+    letter-spacing: 0.03em;
+}
 </style>
 """
 
@@ -271,6 +353,88 @@ def _trait_bar(label: str, value: float, color: str = "#a78bfa") -> str:
         f"{value:.2f}</span>"
         "</div>"
     )
+
+
+def _render_evolution_panel(
+    char: Character,
+    initial_traits: dict[str, float],
+    color: str,
+    review: MilestoneReview | None = None,
+) -> None:
+    """Render a rich visual evolution summary inside a character's expander.
+
+    Shows a narrative summary (from milestone review when available), then
+    per-trait delta bars with before/after values and, where the milestone
+    review produced justifications, a short italic quote explaining each shift.
+
+    Args:
+        char: The character whose current traits are shown.
+        initial_traits: Trait values at scene start (for diff computation).
+        color: Accent colour for this character.
+        review: Optional ``MilestoneReview`` from ``_finish_scene``.
+    """
+    cur_traits = char.personality.traits.to_dict()
+    changed = {
+        k: (initial_traits.get(k, 0.0), cur_traits[k])
+        for k in cur_traits
+        if abs(cur_traits[k] - initial_traits.get(k, 0.0)) > 0.005
+    }
+
+    if not changed and (review is None or not review.narrative_summary):
+        return
+
+    # Build justification map from review shifts
+    justifications: dict[str, str] = {}
+    if review:
+        for shift in review.shifts:
+            if shift.justification:
+                justifications[shift.trait_name] = shift.justification
+
+    st.markdown(
+        '<div class="evo-header">🌱 Character Arc</div>',
+        unsafe_allow_html=True,
+    )
+
+    # Narrative summary
+    if review and review.narrative_summary:
+        st.markdown(
+            f'<div class="evo-narrative">{review.narrative_summary}</div>',
+            unsafe_allow_html=True,
+        )
+
+    if changed:
+        st.markdown(
+            '<div class="evo-micro-label">Trait Shifts</div>',
+            unsafe_allow_html=True,
+        )
+        for trait_name, (old_val, new_val) in sorted(
+            changed.items(), key=lambda x: abs(x[1][1] - x[1][0]), reverse=True,
+        ):
+            delta = new_val - old_val
+            delta_cls = "evo-delta-pos" if delta > 0 else "evo-delta-neg"
+            delta_arrow = "▲" if delta > 0 else "▼"
+            pct_old = int(old_val * 100)
+            pct_new = int(new_val * 100)
+            label = trait_name.replace("_", " ").title()
+            justif = justifications.get(trait_name, "")
+
+            # Bar: ghost bar at old value, filled bar at new value
+            row_html = (
+                f'<div class="evo-trait-row">'
+                f'<span class="evo-trait-label">{label}</span>'
+                f'<div class="evo-bar-wrap">'
+                f'<div class="evo-bar-old" style="width:{pct_old}%"></div>'
+                f'<div class="evo-bar-new" style="width:{pct_new}%;background:{color};opacity:0.75;"></div>'
+                f'</div>'
+                f'<span class="evo-delta {delta_cls}">'
+                f'{delta_arrow}&thinsp;{abs(delta):.2f}</span>'
+                f'</div>'
+            )
+            if justif:
+                row_html += (
+                    f'<div class="evo-justification">"{justif}"</div>'
+                )
+            st.markdown(row_html, unsafe_allow_html=True)
 
 
 def _radar_svg(
@@ -484,6 +648,7 @@ def _init_state() -> None:
     st.session_state.setdefault("scene_exchanges", [])
     st.session_state.setdefault("scene_waiting", False)
     st.session_state.setdefault("scene_mode", "stepwise")
+    st.session_state.setdefault("scene_milestone_reviews", {})
     st.session_state.setdefault("onboarded", False)
     # LLM config -- session-state overrides for runtime safety
     st.session_state.setdefault("llm_provider", settings.llm_provider)
@@ -654,12 +819,18 @@ def _finish_scene() -> None:
         "scene_trait_snapshots", {},
     )
 
-    # Run milestone reviews before closing the event loop
+    # Run milestone reviews before closing the event loop and capture results
     if system and ctx and loop and not loop.is_closed() and ctx.exchanges:
-        with contextlib.suppress(Exception):
-            loop.run_until_complete(
+        try:
+            reviews = loop.run_until_complete(
                 system.run_milestone_reviews(ctx, trait_snapshots),
             )
+            st.session_state.scene_milestone_reviews = {
+                r.character_name: r for r in reviews
+            }
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Milestone reviews failed: %s", exc)
+            st.session_state.scene_milestone_reviews = {}
 
     # Persist evolved characters back to the database
     if ctx:
@@ -1150,9 +1321,12 @@ def _render_cast_panel(characters: list[Character]) -> None:
     Trait sliders, values inputs, and background fields are live-editable.
     Changes are synced back to the Character objects used by the dialogue
     engine, and flagged with a *Modified* badge + save-to-repository option.
+    Characters with AI-driven trait evolutions show a rich evolution panel
+    with narrative summary and per-trait delta bars.
     """
     scene_num = st.session_state.get("scene_counter", 0)
     initial_configs = st.session_state.get("scene_initial_configs", {})
+    milestone_reviews = st.session_state.get("scene_milestone_reviews", {})
 
     st.markdown(
         '<div style="font-size:0.85rem;opacity:0.6;margin-bottom:0.5rem">'
@@ -1168,8 +1342,29 @@ def _render_cast_panel(characters: list[Character]) -> None:
         initial = initial_configs.get(char.name, {})
         is_modified = _is_character_modified(char, initial)
 
-        badge = " ⚠️" if is_modified else ""
-        with st.expander(f"{char.name}{badge}", expanded=False):
+        # Detect AI-driven trait evolutions (compare to scene-start snapshot)
+        initial_traits = initial.get("personality", {}).get("traits", {})
+        cur_traits = char.personality.traits.to_dict()
+        has_evolution = initial_traits and any(
+            abs(cur_traits.get(k, 0.0) - initial_traits.get(k, 0.0)) > 0.005
+            for k in cur_traits
+        )
+        review = milestone_reviews.get(char.name)
+        has_arc = has_evolution or (review is not None and bool(review.narrative_summary))
+
+        if has_arc:
+            badge = " 🌱"
+        elif is_modified:
+            badge = " ⚠️"
+        else:
+            badge = ""
+
+        with st.expander(f"{char.name}{badge}", expanded=bool(has_arc)):
+            # ── Evolution panel (shown first when evolutions are present) ──
+            if has_arc:
+                _render_evolution_panel(char, initial_traits, color, review)
+                st.divider()
+
             # ── Description ───────────────────────────────────────────
             st.caption(char.description)
 
@@ -1277,8 +1472,15 @@ def _render_cast_panel(characters: list[Character]) -> None:
                     "</div>",
                     unsafe_allow_html=True,
                 )
-                if diff:
-                    st.caption("Changed: " + ", ".join(diff[:5]))
+                # Only show non-trait manual changes in the caption (trait
+                # evolutions are already visualised in the evolution panel above)
+                # Trait diff entries have the format "trait_name: old→new"
+                manual_changes = [
+                    d for d in diff
+                    if not any(d.startswith(f"{t}:") for t in cur_traits)
+                ]
+                if manual_changes:
+                    st.caption("Changed: " + ", ".join(manual_changes[:5]))
                 save_name = st.text_input(
                     "Save as",
                     value=f"{char.name} (edited)",
@@ -1390,6 +1592,7 @@ def _start_scene(
         "scene_initial_configs": initial_configs,
         "scene_trait_snapshots": trait_snapshots,
         "scene_counter": scene_num,
+        "scene_milestone_reviews": {},
     })
 
 
