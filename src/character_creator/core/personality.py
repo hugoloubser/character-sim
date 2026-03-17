@@ -18,6 +18,7 @@ from character_creator.core.constants import (
 # MBTI — derived from OCEAN traits, not assigned manually
 # ---------------------------------------------------------------------------
 
+
 class MBTIType(StrEnum):
     """Myers-Briggs personality types derived from OCEAN dimensions."""
 
@@ -227,6 +228,40 @@ class Personality(BaseModel):
     def communication_style(self) -> str:
         """Communication style hint for LLM prompt injection."""
         return MBTI_COMMUNICATION_STYLE[self.mbti_type]
+
+    @property
+    def diction_style(self) -> str:
+        """Derive concrete diction guidance from the formality trait.
+
+        Eloquence is taught — vocabulary level, sentence structure and word
+        choice should reflect the character's background, not default to
+        polished LLM output.  This is injected into every dialogue prompt so
+        the LLM writes speech that sounds like *this* character.
+
+        Returns:
+            A short, actionable description of the character's diction.
+
+        """
+        f = self.traits.formality
+
+        if f >= 0.75:
+            vocab = "sophisticated, precise vocabulary"
+            sentences = "well-structured, complete sentences"
+            contractions = "rarely uses contractions"
+        elif f >= 0.50:
+            vocab = "clear, everyday vocabulary with occasional formal terms"
+            sentences = "natural mix of complete and casual sentences"
+            contractions = "uses contractions naturally"
+        elif f >= 0.25:
+            vocab = "conversational, informal vocabulary"
+            sentences = "short, relaxed sentences; may trail off"
+            contractions = "freely uses contractions and filler words (like, you know, yeah)"
+        else:
+            vocab = "blunt, colloquial vocabulary; may use slang"
+            sentences = "very short sentences or fragments; may interrupt themselves"
+            contractions = "always uses contractions, drops word endings (gonna, wanna, dunno)"
+
+        return f"Vocabulary: {vocab}. Sentences: {sentences}. {contractions}."
 
     def get_trait(self, axis: PersonalityAxis) -> float:
         """Get a specific trait value by axis."""
