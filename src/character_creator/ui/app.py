@@ -284,20 +284,21 @@ _CUSTOM_CSS = """
     background: rgba(255,255,255,0.06);
     border-radius: 3px;
     position: relative;
-    overflow: hidden;
-}
-.evo-bar-old {
-    position: absolute;
-    top: 0; left: 0;
-    height: 100%;
-    border-radius: 3px;
-    background: rgba(255,255,255,0.18);
 }
 .evo-bar-new {
     position: absolute;
     top: 0; left: 0;
     height: 100%;
     border-radius: 3px;
+}
+.evo-bar-marker {
+    position: absolute;
+    top: -1px;
+    width: 2px;
+    height: calc(100% + 2px);
+    border-radius: 1px;
+    background: rgba(255,255,255,0.55);
+    z-index: 1;
 }
 .evo-delta {
     width: 52px;
@@ -418,13 +419,13 @@ def _render_evolution_panel(
             label = trait_name.replace("_", " ").title()
             justif = justifications.get(trait_name, "")
 
-            # Bar: ghost bar at old value, filled bar at new value
+            # Filled bar at new value; vertical tick at old value (always visible)
             row_html = (
                 f'<div class="evo-trait-row">'
                 f'<span class="evo-trait-label">{label}</span>'
                 f'<div class="evo-bar-wrap">'
-                f'<div class="evo-bar-old" style="width:{pct_old}%"></div>'
                 f'<div class="evo-bar-new" style="width:{pct_new}%;background:{color};opacity:0.75;"></div>'
+                f'<div class="evo-bar-marker" style="left:{pct_old}%;"></div>'
                 f'</div>'
                 f'<span class="evo-delta {delta_cls}">'
                 f'{delta_arrow}&thinsp;{abs(delta):.2f}</span>'
@@ -1315,7 +1316,7 @@ def _render_setup_cast_preview(
             character_repository.update(char)
 
 
-def _render_cast_panel(characters: list[Character]) -> None:
+def _render_cast_panel(characters: list[Character]) -> None:  # noqa: PLR0912
     """Render an interactive cast panel with editable character profiles.
 
     Trait sliders, values inputs, and background fields are live-editable.
@@ -1359,7 +1360,21 @@ def _render_cast_panel(characters: list[Character]) -> None:
         else:
             badge = ""
 
-        with st.expander(f"{char.name}{badge}", expanded=bool(has_arc)):
+        # Stable expander key (does not include badge so state survives badge changes)
+        expander_key = f"{kp}_expander"
+        # Auto-expand once when evolutions are first detected; preserve user state
+        # thereafter.  st.session_state[expander_key] is managed by Streamlit after
+        # the first render.
+        if expander_key not in st.session_state:
+            # First render in this scene — open if there are already evolutions
+            st.session_state[expander_key] = bool(has_arc)
+        elif has_arc and not st.session_state.get(f"{expander_key}_arc_shown"):
+            # Evolutions just appeared — auto-expand once, then leave user in control
+            st.session_state[expander_key] = True
+        if has_arc:
+            st.session_state[f"{expander_key}_arc_shown"] = True
+
+        with st.expander(f"{char.name}{badge}", key=expander_key):
             # ── Evolution panel (shown first when evolutions are present) ──
             if has_arc:
                 _render_evolution_panel(char, initial_traits, color, review)
