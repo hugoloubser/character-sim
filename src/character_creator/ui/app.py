@@ -11,10 +11,11 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import logging
 import math
 import time
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import streamlit as st
 
@@ -48,9 +49,14 @@ from character_creator.llm.providers import get_llm_provider  # noqa: E402
 from character_creator.ui.dashboard import page_dashboard  # noqa: E402
 from character_creator.utils.config import settings  # noqa: E402
 
+if TYPE_CHECKING:
+    from character_creator.core.trait_evolution import MilestoneReview
+
 # ---------------------------------------------------------------------------
 # Globals / singletons
 # ---------------------------------------------------------------------------
+
+logger = logging.getLogger(__name__)
 
 MAX_EXCHANGES = 30
 
@@ -239,6 +245,83 @@ _CUSTOM_CSS = """
     margin-left: 0.4rem;
     vertical-align: middle;
 }
+
+/* -- evolution panel -------------------------------------------------- */
+.evo-header {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    color: #a78bfa;
+    opacity: 0.85;
+    margin: 0.7rem 0 0.3rem 0;
+    text-transform: uppercase;
+}
+.evo-narrative {
+    font-style: italic;
+    font-size: 0.83rem;
+    opacity: 0.75;
+    line-height: 1.55;
+    margin-bottom: 0.5rem;
+    padding: 0.35rem 0.6rem;
+    background: rgba(167,139,250,0.07);
+    border-left: 2px solid rgba(167,139,250,0.45);
+    border-radius: 0 4px 4px 0;
+}
+.evo-trait-row {
+    display: flex;
+    align-items: center;
+    margin-bottom: 0.2rem;
+    font-size: 0.82rem;
+}
+.evo-trait-label {
+    width: 115px;
+    flex-shrink: 0;
+    opacity: 0.7;
+}
+.evo-bar-wrap {
+    flex: 1;
+    height: 6px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 3px;
+    position: relative;
+}
+.evo-bar-new {
+    position: absolute;
+    top: 0; left: 0;
+    height: 100%;
+    border-radius: 3px;
+}
+.evo-bar-marker {
+    position: absolute;
+    top: -1px;
+    width: 2px;
+    height: calc(100% + 2px);
+    border-radius: 1px;
+    background: rgba(255,255,255,0.55);
+    z-index: 1;
+}
+.evo-delta {
+    width: 52px;
+    text-align: right;
+    font-size: 0.77rem;
+    font-family: monospace;
+    font-weight: 600;
+}
+.evo-delta-pos { color: #34d399; }
+.evo-delta-neg { color: #f87171; }
+.evo-justification {
+    font-size: 0.76rem;
+    opacity: 0.6;
+    font-style: italic;
+    padding: 0 0 0.35rem 0.5rem;
+    line-height: 1.4;
+}
+.evo-micro-label {
+    font-size: 0.7rem;
+    opacity: 0.5;
+    margin: 0.15rem 0 0.1rem 0;
+    letter-spacing: 0.03em;
+}
 </style>
 """
 
@@ -271,6 +354,92 @@ def _trait_bar(label: str, value: float, color: str = "#a78bfa") -> str:
         f"{value:.2f}</span>"
         "</div>"
     )
+
+
+def _render_evolution_panel(
+    char: Character,
+    initial_traits: dict[str, float],
+    color: str,
+    all_reviews: list[MilestoneReview] | None = None,
+) -> None:
+    """Render a rich visual evolution summary inside a character's expander.
+
+    Shows narrative summaries from all scenes (most recent first), then
+    per-trait delta bars with before/after values spanning the entire
+    interaction, and, where milestone reviews produced justifications,
+    a short italic quote explaining each shift.
+
+    Args:
+        char: The character whose current traits are shown.
+        initial_traits: Trait values at interaction start (for diff).
+        color: Accent colour for this character.
+        all_reviews: All ``MilestoneReview`` objects for this character
+            across all completed scenes, in chronological order.
+    """
+    cur_traits = char.personality.traits.to_dict()
+    changed = {
+        k: (initial_traits.get(k, 0.0), cur_traits[k])
+        for k in cur_traits
+        if abs(cur_traits[k] - initial_traits.get(k, 0.0)) > 0.005
+    }
+
+    narratives = [r.narrative_summary for r in (all_reviews or []) if r.narrative_summary]
+
+    if not changed and not narratives:
+        return
+
+    # Build justification map — later reviews (more recent) override earlier ones
+    justifications: dict[str, str] = {}
+    for review in (all_reviews or []):
+        for shift in review.shifts:
+            if shift.justification:
+                justifications[shift.trait_name] = shift.justification
+
+    st.markdown(
+        '<div class="evo-header">🌱 Character Arc</div>',
+        unsafe_allow_html=True,
+    )
+
+    # Narrative summaries — all scenes, most recent first
+    for narrative in narratives:
+        st.markdown(
+            f'<div class="evo-narrative">{narrative}</div>',
+            unsafe_allow_html=True,
+        )
+
+    if changed:
+        st.markdown(
+            '<div class="evo-micro-label">Trait Shifts</div>',
+            unsafe_allow_html=True,
+        )
+        for trait_name, (old_val, new_val) in sorted(
+            changed.items(), key=lambda x: abs(x[1][1] - x[1][0]), reverse=True,
+        ):
+            delta = new_val - old_val
+            delta_cls = "evo-delta-pos" if delta > 0 else "evo-delta-neg"
+            delta_arrow = "▲" if delta > 0 else "▼"
+            pct_old = int(old_val * 100)
+            pct_new = int(new_val * 100)
+            label = trait_name.replace("_", " ").title()
+            justif = justifications.get(trait_name, "")
+
+            # Filled bar at new value; vertical tick at old value (always visible)
+            row_html = (
+                f'<div class="evo-trait-row">'
+                f'<span class="evo-trait-label">{label}</span>'
+                f'<div class="evo-bar-wrap">'
+                f'<div class="evo-bar-new" style="width:{pct_new}%;background:{color};opacity:0.75;"></div>'
+                f'<div class="evo-bar-marker" style="left:{pct_old}%;"></div>'
+                f'</div>'
+                f'<span class="evo-delta {delta_cls}">'
+                f'{delta_arrow}&thinsp;{abs(delta):.2f}</span>'
+                f'</div>'
+            )
+            if justif:
+                row_html += (
+                    f'<div class="evo-justification">"{justif}"</div>'
+                )
+            st.markdown(row_html, unsafe_allow_html=True)
 
 
 def _radar_svg(
@@ -484,6 +653,9 @@ def _init_state() -> None:
     st.session_state.setdefault("scene_exchanges", [])
     st.session_state.setdefault("scene_waiting", False)
     st.session_state.setdefault("scene_mode", "stepwise")
+    st.session_state.setdefault("scene_milestone_reviews", {})
+    st.session_state.setdefault("interaction_baseline_configs", {})
+    st.session_state.setdefault("interaction_reviews_history", [])
     st.session_state.setdefault("onboarded", False)
     # LLM config -- session-state overrides for runtime safety
     st.session_state.setdefault("llm_provider", settings.llm_provider)
@@ -654,12 +826,25 @@ def _finish_scene() -> None:
         "scene_trait_snapshots", {},
     )
 
-    # Run milestone reviews before closing the event loop
+    # Run milestone reviews before closing the event loop and capture results
     if system and ctx and loop and not loop.is_closed() and ctx.exchanges:
-        with contextlib.suppress(Exception):
-            loop.run_until_complete(
+        try:
+            reviews = loop.run_until_complete(
                 system.run_milestone_reviews(ctx, trait_snapshots),
             )
+            scene_reviews = {r.character_name: r for r in reviews}
+            st.session_state.scene_milestone_reviews = scene_reviews
+            # Accumulate reviews for the full interaction arc
+            history: list = st.session_state.get("interaction_reviews_history", [])
+            if reviews:
+                history.append({
+                    "scene": st.session_state.get("scene_counter", 0),
+                    "reviews": scene_reviews,
+                })
+                st.session_state.interaction_reviews_history = history
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Milestone reviews failed: %s", exc)
+            st.session_state.scene_milestone_reviews = {}
 
     # Persist evolved characters back to the database
     if ctx:
@@ -1144,15 +1329,19 @@ def _render_setup_cast_preview(
             character_repository.update(char)
 
 
-def _render_cast_panel(characters: list[Character]) -> None:
+def _render_cast_panel(characters: list[Character]) -> None:  # noqa: PLR0912
     """Render an interactive cast panel with editable character profiles.
 
     Trait sliders, values inputs, and background fields are live-editable.
     Changes are synced back to the Character objects used by the dialogue
     engine, and flagged with a *Modified* badge + save-to-repository option.
+    Characters with AI-driven trait evolutions show a rich evolution panel
+    with narrative summary and per-trait delta bars.
     """
     scene_num = st.session_state.get("scene_counter", 0)
     initial_configs = st.session_state.get("scene_initial_configs", {})
+    baseline_configs = st.session_state.get("interaction_baseline_configs", {})
+    reviews_history: list[dict] = st.session_state.get("interaction_reviews_history", [])
 
     st.markdown(
         '<div style="font-size:0.85rem;opacity:0.6;margin-bottom:0.5rem">'
@@ -1168,8 +1357,45 @@ def _render_cast_panel(characters: list[Character]) -> None:
         initial = initial_configs.get(char.name, {})
         is_modified = _is_character_modified(char, initial)
 
-        badge = " ⚠️" if is_modified else ""
-        with st.expander(f"{char.name}{badge}", expanded=False):
+        # Detect AI-driven trait evolutions against interaction-start baseline
+        baseline = baseline_configs.get(char.name, initial)
+        baseline_traits = baseline.get("personality", {}).get("traits", {})
+        cur_traits = char.personality.traits.to_dict()
+        has_evolution = baseline_traits and any(
+            abs(cur_traits.get(k, 0.0) - baseline_traits.get(k, 0.0)) > 0.005
+            for k in cur_traits
+        )
+        # Collect all milestone reviews for this character across all scenes
+        char_reviews: list[MilestoneReview] = [
+            entry["reviews"][char.name]
+            for entry in reviews_history
+            if char.name in entry["reviews"]
+        ]
+        has_arc = has_evolution or bool(char_reviews)
+
+        if has_arc:
+            badge = " 🌱"
+        elif is_modified:
+            badge = " ⚠️"
+        else:
+            badge = ""
+
+        # Stable expander key — scene-independent so state persists across scenes
+        expander_key = f"{char.name.replace(' ', '_')}_expander"
+        # Auto-expand once when evolutions first appear; preserve user choice after
+        if expander_key not in st.session_state:
+            st.session_state[expander_key] = bool(has_arc)
+        elif has_arc and not st.session_state.get(f"{expander_key}_arc_shown"):
+            st.session_state[expander_key] = True
+        if has_arc:
+            st.session_state[f"{expander_key}_arc_shown"] = True
+
+        with st.expander(f"{char.name}{badge}", key=expander_key):
+            # ── Evolution panel (shown first when evolutions are present) ──
+            if has_arc:
+                _render_evolution_panel(char, baseline_traits, color, char_reviews)
+                st.divider()
+
             # ── Description ───────────────────────────────────────────
             st.caption(char.description)
 
@@ -1277,8 +1503,15 @@ def _render_cast_panel(characters: list[Character]) -> None:
                     "</div>",
                     unsafe_allow_html=True,
                 )
-                if diff:
-                    st.caption("Changed: " + ", ".join(diff[:5]))
+                # Only show non-trait manual changes in the caption (trait
+                # evolutions are already visualised in the evolution panel above)
+                # Trait diff entries have the format "trait_name: old→new"
+                manual_changes = [
+                    d for d in diff
+                    if not any(d.startswith(f"{t}:") for t in cur_traits)
+                ]
+                if manual_changes:
+                    st.caption("Changed: " + ", ".join(manual_changes[:5]))
                 save_name = st.text_input(
                     "Save as",
                     value=f"{char.name} (edited)",
@@ -1390,7 +1623,12 @@ def _start_scene(
         "scene_initial_configs": initial_configs,
         "scene_trait_snapshots": trait_snapshots,
         "scene_counter": scene_num,
+        "scene_milestone_reviews": {},
     })
+
+    # Set interaction baseline once — first scene only, never cleared
+    if not st.session_state.get("interaction_baseline_configs"):
+        st.session_state["interaction_baseline_configs"] = initial_configs
 
 
 def _run_one_step(speaker: Character | None = None) -> None:
