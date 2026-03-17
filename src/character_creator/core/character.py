@@ -77,6 +77,14 @@ class Character(BaseModel):
             f"\nCommunication style: {self.personality.communication_style}",
         ]
 
+        profile_parts.append(f"\n## Diction\n{self.personality.diction_style}")
+
+        if self.personality.speech_patterns:
+            profile_parts.append(
+                "\n## Speech Patterns\n"
+                + "\n".join(f"- {p}" for p in self.personality.speech_patterns)
+            )
+
         if self.personality.values.priority_keywords:
             profile_parts.append(
                 f"\n## Core Values\n{', '.join(self.personality.values.priority_keywords)}"
@@ -104,9 +112,7 @@ class Character(BaseModel):
             )
             profile_parts.append(f"\n## Recent Conversation\n{history_str}")
 
-        profile_parts.append(
-            f"\n## Current Emotional State\n{self.current_emotional_state}"
-        )
+        profile_parts.append(f"\n## Current Emotional State\n{self.current_emotional_state}")
 
         # Self-model section (reflective self-awareness)
         if self.self_model:

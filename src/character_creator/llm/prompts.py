@@ -17,10 +17,10 @@ Generate the response as a JSON object with these exact fields:
     "conscientiousness": <float 0-1>,
     "emotional_stability": <float 0-1>,
     "humor_inclination": <float 0-1>,
-    "formality": <float 0-1>,
+    "formality": <float 0-1, where 0=very casual/street and 1=highly formal/educated>,
     "extraversion": <float 0-1, how energised by social interaction>,
     "agreeableness": <float 0-1, how cooperative and empathetic>,
-    "speech_patterns": [<list of strings describing speech patterns>],
+    "speech_patterns": [<list of strings describing HOW this character speaks: include vocabulary level (e.g. "uses slang and contractions", "speaks in clipped sentences", "favours simple words"), distinctive phrases, sentence habits, and any accent or dialect markers>],
     "quirks": [<list of character quirks>],
     "priority_keywords": [<list of core values>],
     "beliefs": [<list of core beliefs>],
@@ -34,6 +34,8 @@ The nine numeric traits map to the OCEAN Big-Five model:
 - Extraversion = extraversion
 - Agreeableness = agreeableness
 - Neuroticism ≈ inverse of emotional_stability
+
+The formality trait directly shapes diction: a low value (≤0.3) means the character uses colloquial language, slang, and sentence fragments; a high value (≥0.7) means they use precise vocabulary and complete sentences. Set formality to reflect the character's education, upbringing, and social world — not the default polished LLM voice.
 
 Be creative but consistent. The traits should feel authentic and interconnected.""")
 
@@ -102,6 +104,7 @@ $conversation_history
 3. Reflect their emotional state, values, and personality type in the response.
 4. Be authentic to their experiences and beliefs.
 5. Respond with ONLY the dialogue text, no narration or meta-commentary.
+6. Match their diction exactly — use the vocabulary level, sentence structure, and speech patterns described in their Diction and Speech Patterns sections. Eloquence is earned, not assumed; do not upgrade their language beyond what their background warrants.
 
 $character_name's response:""")
 
@@ -128,6 +131,7 @@ This is the unguarded thought that surfaces the instant the previous speaker fin
 4. The thought should feel live and immediate — this is the moment of deliberation before they open their mouth.
 5. Generate a brief internal thought (1-3 sentences).
 6. Respond with ONLY the internal thought text, no narration or meta-commentary.
+7. The internal voice must match their diction — vocabulary level, sentence structure, and speech habits as described in their Diction and Speech Patterns sections. A character who speaks simply also thinks simply.
 
 $character_name's pre-exchange thought:""")
 
@@ -156,6 +160,7 @@ This is the private thought that follows the act of speaking — an unfiltered r
 3. Consider their MBTI type — it shapes how they internally process their own actions.
 4. If there are active internal tensions, the character may feel them more sharply now that they have spoken.
 5. Respond with ONLY the internal thought text, no narration or meta-commentary.
+6. The internal voice must match their diction — vocabulary level, sentence structure, and speech habits as described in their Diction and Speech Patterns sections. A character who speaks simply also thinks simply.
 
 $character_name's post-exchange thought:""")
 

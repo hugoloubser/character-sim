@@ -231,7 +231,103 @@ class TestDialogueContext:
         assert alice not in others
 
 
-class TestValidators:
+class TestDictionStyle:
+    """Test suite for Personality.diction_style derivation."""
+
+    def test_high_formality_uses_sophisticated_vocabulary(self) -> None:
+        """High formality produces sophisticated vocabulary guidance."""
+        p = Personality(traits=PersonalityTraits(formality=0.9))
+        style = p.diction_style
+        assert "sophisticated" in style
+        assert "precise" in style
+
+    def test_high_formality_avoids_contractions(self) -> None:
+        """High formality guidance advises against contractions."""
+        p = Personality(traits=PersonalityTraits(formality=0.9))
+        assert "contractions" in p.diction_style
+
+    def test_low_formality_uses_colloquial_vocabulary(self) -> None:
+        """Low formality produces blunt, colloquial vocabulary guidance."""
+        p = Personality(traits=PersonalityTraits(formality=0.1))
+        style = p.diction_style
+        assert "colloquial" in style or "blunt" in style
+
+    def test_low_formality_uses_contractions(self) -> None:
+        """Low formality guidance shows always-uses-contractions pattern."""
+        p = Personality(traits=PersonalityTraits(formality=0.1))
+        assert "contractions" in p.diction_style
+
+    def test_mid_formality_returns_conversational(self) -> None:
+        """Mid-low formality (0.35) returns conversational style."""
+        p = Personality(traits=PersonalityTraits(formality=0.35))
+        style = p.diction_style
+        assert "conversational" in style or "informal" in style
+
+    def test_diction_style_is_string(self) -> None:
+        """diction_style always returns a non-empty string."""
+        for formality in (0.0, 0.25, 0.5, 0.75, 1.0):
+            p = Personality(traits=PersonalityTraits(formality=formality))
+            assert isinstance(p.diction_style, str)
+            assert len(p.diction_style) > 0
+
+
+class TestCharacterProfileDiction:
+    """Test that diction and speech patterns appear in the character profile."""
+
+    def test_profile_contains_diction_section(self) -> None:
+        """Character profile includes a Diction section."""
+        char = Character(
+            name="Riley",
+            description="A street-smart kid",
+            personality=Personality(traits=PersonalityTraits(formality=0.1)),
+        )
+        profile = char.get_character_profile()
+        assert "Diction" in profile
+
+    def test_profile_diction_reflects_low_formality(self) -> None:
+        """Low-formality character profile shows colloquial diction."""
+        char = Character(
+            name="Street",
+            description="Rough around the edges",
+            personality=Personality(traits=PersonalityTraits(formality=0.1)),
+        )
+        profile = char.get_character_profile()
+        assert "colloquial" in profile or "blunt" in profile
+
+    def test_profile_diction_reflects_high_formality(self) -> None:
+        """High-formality character profile shows sophisticated diction."""
+        char = Character(
+            name="Professor",
+            description="Academic and precise",
+            personality=Personality(traits=PersonalityTraits(formality=0.9)),
+        )
+        profile = char.get_character_profile()
+        assert "sophisticated" in profile or "precise" in profile
+
+    def test_profile_includes_speech_patterns_when_present(self) -> None:
+        """Character profile lists speech patterns when they are defined."""
+        char = Character(
+            name="Jax",
+            description="Chatty mechanic",
+            personality=Personality(
+                traits=PersonalityTraits(formality=0.2),
+                speech_patterns=["drops g's off -ing words", "calls everyone 'mate'"],
+            ),
+        )
+        profile = char.get_character_profile()
+        assert "Speech Patterns" in profile
+        assert "mate" in profile
+
+    def test_profile_omits_speech_patterns_section_when_empty(self) -> None:
+        """Speech Patterns section is absent when no patterns are defined."""
+        char = Character(
+            name="Blank",
+            description="Default character",
+            personality=Personality(speech_patterns=[]),
+        )
+        profile = char.get_character_profile()
+        assert "Speech Patterns" not in profile
+
     """Test suite for validation utilities."""
 
     def test_validate_character_name(self) -> None:
